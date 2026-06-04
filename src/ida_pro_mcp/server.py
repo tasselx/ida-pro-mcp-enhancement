@@ -193,12 +193,28 @@ def main():
         return
 
     if args.broker:
+        from http.server import ThreadingHTTPServer
         from .broker.combined import CombinedRequestHandler
 
         get_broker_client(f"http://127.0.0.1:{args.port}")
         mcp.cors_allowed_origins = ["*"]
+
+        server = ThreadingHTTPServer(("0.0.0.0", args.port), CombinedRequestHandler, bind_and_activate=False)
+        server.allow_reuse_address = True
+        setattr(server, "mcp_server", mcp)
+        server.server_bind()
+        server.server_activate()
+        mcp._http_server = server
+        mcp._running = True
+
         print(f"[MCP] Broker 已启动: http://0.0.0.0:{args.port}/mcp", file=sys.stderr)
-        mcp.serve("0.0.0.0", args.port, background=False, request_handler=CombinedRequestHandler)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+            mcp._running = False
         return
 
     get_broker_client(args.broker_url)
